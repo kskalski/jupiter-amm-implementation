@@ -20,11 +20,11 @@ impl Fees {
         })
     }
 
-    pub fn trading_fee(&self, amount: u128) -> Option<u128> {
+    pub fn _trading_fee(&self, amount: u128) -> Option<u128> {
         self.0.trading_fee(amount)
     }
 
-    pub fn owner_trading_fee(&self, amount: u128) -> Option<u128> {
+    pub fn _owner_trading_fee(&self, amount: u128) -> Option<u128> {
         self.0.owner_trading_fee(amount)
     }
 

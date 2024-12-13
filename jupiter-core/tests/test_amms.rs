@@ -1,15 +1,13 @@
-use std::collections::HashMap;
-
 use anyhow::Error;
-use jupiter_amm_interface::{AmmContext, ClockRef, KeyedAccount, SwapMode};
+use jupiter_amm_interface::{AccountMap, AmmContext, ClockRef, KeyedAccount, SwapMode};
 use jupiter_core::{
     amm::Amm,
     amms::{spl_token_swap_amm::SplTokenSwapAmm, test_harness::AmmTestHarness},
     route::get_token_mints_permutations,
     test_harness::AmmTestSwapParams,
 };
+use solana_sdk::pubkey;
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::{account::Account, pubkey};
 
 /// Loads AMM from snapshot and tests quoting
 async fn test_quoting_for_amm_key<T: Amm + 'static>(
@@ -18,19 +16,17 @@ async fn test_quoting_for_amm_key<T: Amm + 'static>(
     use_shared_accounts: bool,
     tolerance: u64,
     option: Option<String>,
-    before_test_setup: Option<impl FnMut(&dyn Amm, &mut HashMap<Pubkey, Account>)>,
+    before_test_setup: Option<impl FnMut(&dyn Amm, &mut AccountMap)>,
     expect_error: Option<Error>,
     restricted_mint_permutations: Option<Vec<(Pubkey, Pubkey)>>,
-) where
-    T: Amm,
-{
+) {
     let test_harness = AmmTestHarness::new_with_rpc_url("".into(), amm_key, option);
     let keyed_account: KeyedAccount = test_harness.get_keyed_account_from_snapshot().unwrap();
 
     let amm_context = AmmContext {
         clock_ref: ClockRef::from(test_harness.get_clock()),
     };
-    let mut amm = T::from_keyed_account(&keyed_account, &amm_context).unwrap();
+    let amm = T::from_keyed_account(&keyed_account, &amm_context).unwrap();
     // if amm.requires_update_for_reserve_mints() {
     //     test_harness.update_amm_from_snapshot(&mut amm).unwrap();
     // }
@@ -62,7 +58,7 @@ macro_rules! test_exact_in_amms {
                         "default" => None,
                         _ => Some($option.to_string()),
                     };
-                    let before_test_setup: Option<fn(&dyn Amm, &mut HashMap<Pubkey, Account>)> = None;
+                    let before_test_setup: Option<fn(&dyn Amm, &mut AccountMap)> = None;
                     test_quoting_for_amm_key::<$amm_struct>($amm_key, SwapMode::ExactIn, false, $tolerance, option, before_test_setup, None, None).await
                 }
                 #[tokio::test]
@@ -71,7 +67,7 @@ macro_rules! test_exact_in_amms {
                         "default" => None,
                         _ => Some($option.to_string()),
                     };
-                    let before_test_setup: Option<fn(&dyn Amm, &mut HashMap<Pubkey, Account>)> = None;
+                    let before_test_setup: Option<fn(&dyn Amm, &mut AccountMap)> = None;
                     test_quoting_for_amm_key::<$amm_struct>($amm_key, SwapMode::ExactIn, true, $tolerance, option, before_test_setup, None, None).await
                 }
             }
@@ -121,7 +117,7 @@ async fn test_quoting_with_amm(
     tolerance: u64,
     use_shared_accounts: bool,
     swap_mode: SwapMode,
-    mut before_test_setup: Option<impl FnMut(&dyn Amm, &mut HashMap<Pubkey, Account>)>,
+    mut before_test_setup: Option<impl FnMut(&dyn Amm, &mut AccountMap)>,
     expect_error: Option<anyhow::Error>,
     restricted_mint_permutations: Option<Vec<(Pubkey, Pubkey)>>,
 ) {

@@ -95,7 +95,7 @@ pub struct AmmTestHarnessProgramTest {
     context: ProgramTestContext,
     program_test_authority: ProgramTestAuthority,
     program_test_user: ProgramTestUser,
-    option: Option<String>,
+    _option: Option<String>,
 }
 
 fn clone_keypair(keypair: &Keypair) -> Keypair {
@@ -228,7 +228,7 @@ impl AmmTestHarnessProgramTest {
 
         // solution for amm that cant quote certain amount and also could be bug introducing, divide by 2 until can quote
         while quote_result.is_none() && quote_count < 10 {
-            amount = amount / 2;
+            amount /= 2;
             match amm.quote(&QuoteParams {
                 amount,
                 input_mint: *source_mint,
@@ -257,6 +257,7 @@ impl AmmTestHarnessProgramTest {
             out_amount: amount,
             jupiter_program_id: &jupiter::ID,
             missing_dynamic_accounts_as_default: false,
+            swap_mode,
         };
         let SwapAndAccountMetas {
             swap,
@@ -553,7 +554,7 @@ impl RpcSender for TestRpcSender {
     }
 }
 
-pub type AccountsSnapshot = HashMap<Pubkey, Account>;
+pub type AccountsSnapshot = AccountMap;
 
 pub struct ProgramTestAuthority {
     id: u8,
@@ -621,7 +622,8 @@ impl AmmTestHarness {
             "tests/fixtures/accounts/{0}/{1}.json",
             directory_name, self.key,
         );
-        let file = File::open(&file_path).expect(&format!("Snapshot file {file_path} exists"));
+        let file =
+            File::open(&file_path).unwrap_or_else(|_| panic!("Snapshot file {file_path} exists"));
         let keyed_account: RpcKeyedAccount = serde_json::from_reader(file).unwrap();
         let account: Account = UiAccount::decode(&keyed_account.account).unwrap();
         let params_file_path = format!("tests/fixtures/accounts/{0}/params.json", directory_name);
@@ -661,7 +663,7 @@ impl AmmTestHarness {
             .unwrap()
             .into_iter()
             .zip(accounts_to_update)
-            .fold(HashMap::new(), |mut m, (account, address)| {
+            .fold(AccountMap::default(), |mut m, (account, address)| {
                 if let Some(account) = account {
                     m.insert(address, account);
                 }
@@ -671,22 +673,21 @@ impl AmmTestHarness {
     }
 
     fn load_accounts_snapshot(&self) -> AccountsSnapshot {
-        let mut account_map = HashMap::new();
+        let mut account_map = AccountMap::default();
         for entry in glob(&format!(
             "tests/fixtures/accounts/{0}/*.json",
             self.directory_name()
         ))
         .unwrap()
+        .flatten()
         {
-            if let Ok(entry) = entry {
-                if entry.ends_with("params.json") {
-                    continue;
-                }
-                let file = File::open(entry).unwrap();
-                let keyed_account: RpcKeyedAccount = serde_json::from_reader(file).unwrap();
-                let account: Account = UiAccount::decode(&keyed_account.account).unwrap();
-                account_map.insert(Pubkey::from_str(&keyed_account.pubkey).unwrap(), account);
+            if entry.ends_with("params.json") {
+                continue;
             }
+            let file = File::open(entry).unwrap();
+            let keyed_account: RpcKeyedAccount = serde_json::from_reader(file).unwrap();
+            let account: Account = UiAccount::decode(&keyed_account.account).unwrap();
+            account_map.insert(Pubkey::from_str(&keyed_account.pubkey).unwrap(), account);
         }
         account_map
     }
@@ -702,7 +703,7 @@ impl AmmTestHarness {
     pub async fn load_program_test(
         &self,
         amm: &mut dyn Amm,
-        before_test_setup: Option<&mut impl FnMut(&dyn Amm, &mut HashMap<Pubkey, Account>)>,
+        before_test_setup: Option<&mut impl FnMut(&dyn Amm, &mut AccountMap)>,
     ) -> AmmTestHarnessProgramTest {
         use solana_program_test::ProgramTest;
 
@@ -761,7 +762,7 @@ impl AmmTestHarness {
             context,
             program_test_authority,
             program_test_user,
-            option: self.option.clone(),
+            _option: self.option.clone(),
         }
     }
 
@@ -841,6 +842,7 @@ impl AmmTestHarness {
                     .unwrap_or_else(|| panic!("No in amount for mint: {}", destination_mint)),
                 jupiter_program_id: &placeholder,
                 missing_dynamic_accounts_as_default: false,
+                swap_mode: Default::default(),
             })?;
 
             addresses_for_snapshot.extend(
